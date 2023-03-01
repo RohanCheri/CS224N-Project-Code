@@ -49,13 +49,15 @@ from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   XLNetForSequenceClassification,
                                   XLNetTokenizer)
 
+from transformers import DebertaV2ForMultipleChoice, DebertaV2Tokenizer, DebertaV2Config
+
 from pytorch_transformers import AdamW, WarmupLinearSchedule
 
 #from scripts.adhoc_models import RobertaForMultipleChoice
-from scripts.roberta_mc import RobertaForMultipleChoice
-from scripts.utils import (compute_metrics, convert_examples_to_features,
+from roberta_mc import RobertaForMultipleChoice
+from utils import (compute_metrics, convert_examples_to_features,
                                 output_modes, processors,
-                                convert_multiple_choice_examples_to_features)
+                                train_sizes, convert_multiple_choice_examples_to_features)
 
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,7 @@ MODEL_CLASSES = {
     'xlm': (XLMConfig, XLMForSequenceClassification, XLMTokenizer),
     'roberta': (RobertaConfig, RobertaForSequenceClassification, RobertaTokenizer),
     'roberta_mc': (RobertaConfig, RobertaForMultipleChoice, RobertaTokenizer),
+    'deberta': (DebertaV2Config, DebertaV2ForMultipleChoice, DebertaV2Tokenizer)
 }
 
 
@@ -86,7 +89,7 @@ def train(args, train_dataset, model, tokenizer):
     if args.local_rank in [-1, 0]:
         tb_writer = SummaryWriter()
 
-    processor = processors[args.task_name]()
+    processor = processors[args.task_name](args.train_size)
 
     args.train_batch_size = args.per_gpu_train_batch_size * max(1, args.n_gpu)
     train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
@@ -301,7 +304,7 @@ def evaluate(args, model, tokenizer, processor, prefix="", eval_split=None):
 
 
 def load_and_cache_examples(args, task, tokenizer, evaluate=False, eval_split="train"):
-    processor = processors[task]()
+    processor = processors[task](args.train_size)
     output_mode = output_modes[task]
     # Load data features from cache or dataset file
     if args.data_cache_dir is None:
@@ -337,7 +340,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, eval_split="t
                 cls_token_at_end=bool(args.model_type in ['xlnet']),            # xlnet has a cls token at the end
                 cls_token=tokenizer.cls_token,
                 sep_token=tokenizer.sep_token,
-                sep_token_extra=bool(args.model_type in ['roberta', "roberta_mc"]),
+                sep_token_extra=bool(args.model_type in ['roberta', "roberta_mc", "deberta"]),
                 cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
                 pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
                 pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
@@ -348,7 +351,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, eval_split="t
                                                     cls_token_at_end=bool(args.model_type in ['xlnet']),            # xlnet has a cls token at the end
                                                     cls_token=tokenizer.cls_token,
                                                     sep_token=tokenizer.sep_token,
-                                                    sep_token_extra=bool(args.model_type in ['roberta', "roberta_mc"]),
+                                                    sep_token_extra=bool(args.model_type in ['roberta', "roberta_mc", "deberta"]),
                                                     cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
                                                     pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
                                                     pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
@@ -405,6 +408,8 @@ def main():
     parser.add_argument("--data_cache_dir", default=None, type=str, help="Cache dir if it needs to be diff from data_dir")
 
     ## Other parameters
+    parser.add_argument("--train_size", default="m", type=str,
+                        help="The size of the task to train selected in the list: " + ", ".join(train_sizes))
     parser.add_argument("--config_name", default="", type=str,
                         help="Pretrained config name or path if not the same as model_name")
     parser.add_argument("--tokenizer_name", default="", type=str,
@@ -511,7 +516,7 @@ def main():
     args.task_name = args.task_name.lower()
     if args.task_name not in processors:
         raise ValueError("Task not found: %s" % (args.task_name))
-    processor = processors[args.task_name]()
+    processor = processors[args.task_name](args.train_size)
     args.output_mode = output_modes[args.task_name]
     label_list = processor.get_labels()
     num_labels = len(label_list)

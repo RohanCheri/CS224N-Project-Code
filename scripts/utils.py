@@ -94,6 +94,9 @@ class MultipleChoiceFeatures(object):
 
 class DataProcessor(object):
     """Base class for data converters for sequence classification data sets."""
+    def __init__(self, size):
+        super().__init__()
+        self.size = size
 
     def get_train_examples(self, data_dir):
         """Gets a collection of `InputExample`s for the train set."""
@@ -137,7 +140,7 @@ class WinograndeProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         return self._create_examples(
-            self._read_jsonl(os.path.join(data_dir, "train.jsonl")))
+            self._read_jsonl(os.path.join(data_dir, "train_" + self.size + ".jsonl")))
 
     def get_dev_examples(self, data_dir):
         return self._create_examples(
@@ -197,7 +200,7 @@ class SuperGlueWscProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         return self._create_examples(
-            self._read_jsonl(os.path.join(data_dir, "train.jsonl")))
+            self._read_jsonl(os.path.join(data_dir, "train_" + self.size + ".jsonl")))
 
     def get_dev_examples(self, data_dir):
         return self._create_examples(
@@ -511,3 +514,5 @@ GLUE_TASKS_NUM_LABELS = {
     "winogrande": 2,
     "superglue-wsc": 2,
 }
+
+train_sizes = ['xs', 's', 'm', 'l', 'xl', 'debiased']

@@ -19,4 +19,5 @@ CUDA_VISIBLE_DEVICES=0 python ./scripts/run_experiment.py \
 --seed 42 \
 --data_cache_dir ./output/cache/ \
 --warmup_pct 0.1 \
---evaluate_during_training
+--evaluate_during_training \
+--overwrite_output_directory

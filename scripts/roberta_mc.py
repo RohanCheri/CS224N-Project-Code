@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torchmetrics import Dice
+import torch.nn.functional as F
 from pytorch_transformers import BertPreTrainedModel, RobertaConfig, \
     ROBERTA_PRETRAINED_MODEL_ARCHIVE_MAP, RobertaModel
 from pytorch_transformers.modeling_roberta import RobertaClassificationHead
@@ -20,6 +20,9 @@ class DiceBCELoss(nn.Module):
         inputs = inputs.view(-1)
         targets = targets.view(-1)
         
+        inputs = inputs.float()
+        targets = targets.float()
+
         intersection = (inputs * targets).sum()                            
         dice_loss = 1 - (2.*intersection + smooth)/(inputs.sum() + targets.sum() + smooth)  
         BCE = F.binary_cross_entropy(inputs, targets, reduction='mean')
@@ -57,13 +60,9 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
         outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
 
         if labels is not None:
-<<<<<<< Updated upstream
+            redone_labels = F.one_hot(labels, num_classes=num_choices)
             loss_fct = DiceBCELoss()
-            loss = loss_fct(reshaped_logits, labels)
-=======
-            loss_fct = 
-            loss = loss_fct(m(reshaped_logits), labels)
->>>>>>> Stashed changes
+            loss = loss_fct(reshaped_logits, redone_labels)
             outputs = (loss,) + outputs
 
         return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)

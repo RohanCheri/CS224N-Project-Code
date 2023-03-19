@@ -30,6 +30,8 @@ import os
 import sys
 from io import open
 
+import random
+
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import matthews_corrcoef, f1_score
 import json
@@ -170,6 +172,13 @@ class WinograndeProcessor(DataProcessor):
 
             conj = "_"
             idx = sentence.index(conj)
+
+            # Add some randomness to the idx with a 15% probability
+            if (random.uniform(0, 1) < 0.15):
+                idx -= random.randint (0, len(sentence)/3)
+                if idx < 0:
+                    idx = 0
+
             context = sentence[:idx]
             option_str = "_ " + sentence[idx + len(conj):].strip()
 

@@ -61,7 +61,7 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
 
         if labels is not None:
             redone_labels = F.one_hot(labels, num_classes=num_choices)
-            loss_fct = DiceBCELoss()
+            loss_fct = nn.BCEWithLogitsLoss()
             loss = loss_fct(reshaped_logits, redone_labels)
             outputs = (loss,) + outputs
 

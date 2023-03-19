@@ -147,6 +147,10 @@ def train(args, train_dataset, model, tokenizer):
     train_iterator = trange(int(args.num_train_epochs), desc="Epoch", disable=args.local_rank not in [-1, 0])
     # set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
     for _ in train_iterator:
+        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
+        train_sampler = RandomSampler(train_dataset) if args.local_rank == -1 else DistributedSampler(train_dataset)
+        train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
+
         epoch_iterator = tqdm(train_dataloader, desc="Iteration", disable=args.local_rank not in [-1, 0], mininterval=10, ncols=100)
         for step, batch in enumerate(epoch_iterator):
             model.train()

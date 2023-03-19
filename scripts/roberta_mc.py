@@ -60,9 +60,9 @@ class RobertaForMultipleChoice(BertPreTrainedModel):
         outputs = (reshaped_logits,) + outputs[2:]  # add hidden states and attention if they are here
 
         if labels is not None:
-            redone_labels = F.one_hot(labels, num_classes=num_choices).float()
-            loss_fct = nn.BCEWithLogitsLoss()
-            loss = loss_fct(reshaped_logits, redone_labels)
+            # redone_labels = F.one_hot(labels, num_classes=num_choices).float()
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(reshaped_logits, labels)
             outputs = (loss,) + outputs
 
         return outputs  # (loss), reshaped_logits, (hidden_states), (attentions)

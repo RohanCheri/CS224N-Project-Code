@@ -172,7 +172,7 @@ class WinograndeProcessor(DataProcessor):
             conj = "_"
             idx = sentence.index(conj)
             
-            if random.uniform() < 0.15:
+            if random.uniform(0, 1) < 0.15:
                 idx -= random.randrange(1, int(len(sentence) / 3))
                 if idx < 0:
                     idx = 1

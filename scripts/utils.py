@@ -141,7 +141,7 @@ class DataProcessor(object):
 class WinograndeProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
-        return self._create_examples(
+        return self._create_train_ex(
             self._read_jsonl(os.path.join(data_dir, "train_" + self.size + ".jsonl")))
 
     def get_dev_examples(self, data_dir):

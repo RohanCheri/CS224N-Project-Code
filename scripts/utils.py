@@ -24,6 +24,7 @@
 
 from __future__ import absolute_import, division, print_function
 
+import random
 import csv
 import logging
 import os
@@ -139,7 +140,7 @@ class DataProcessor(object):
 class WinograndeProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
-        return self._create_examples(
+        return self._create_examples_train(
             self._read_jsonl(os.path.join(data_dir, "train_" + self.size + ".jsonl")))
 
     def get_dev_examples(self, data_dir):
@@ -152,6 +153,53 @@ class WinograndeProcessor(DataProcessor):
 
     def get_labels(self):
         return ["1", "2"]
+    
+    def _create_examples_train(self, records):
+        examples = []
+        for (i, record) in enumerate(records):
+            guid = record['qID']
+            sentence = record['sentence']
+
+            name1 = record['option1']
+            name2 = record['option2']
+            if not 'answer' in record:
+                # This is a dummy label for test prediction.
+                # test.jsonl doesn't include the `answer`.
+                label = "1"
+            else:
+                label = record['answer']
+
+            conj = "_"
+            idx = sentence.index(conj)
+            
+            if random.uniform() < 0.15:
+                idx -= random.randrange(1, int(len(sentence) / 3))
+                if idx < 0:
+                    idx = 1
+
+            context = sentence[:idx]
+            option_str = "_ " + sentence[idx + len(conj):].strip()
+
+            option1 = option_str.replace("_", name1)
+            option2 = option_str.replace("_", name2)
+
+            mc_example = MCInputExample(
+                guid=guid,
+                options=[
+                    {
+                        'segment1': context,
+                        'segment2': option1
+                    },
+                    {
+                        'segment1': context,
+                        'segment2': option2
+                    }
+                ],
+                label=label
+            )
+            examples.append(mc_example)
+
+        return examples
 
     def _create_examples(self, records):
         examples = []

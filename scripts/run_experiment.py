@@ -340,7 +340,7 @@ def load_and_cache_examples(args, task, tokenizer, evaluate=False, eval_split="t
                 cls_token_at_end=bool(args.model_type in ['xlnet']),            # xlnet has a cls token at the end
                 cls_token=tokenizer.cls_token,
                 sep_token=tokenizer.sep_token,
-                sep_token_extra=bool(args.model_type in ['roberta', "roberta_mc"]),
+                sep_token_extra=bool(args.model_type in ['roberta', 'roberta_mc']),
                 cls_token_segment_id=2 if args.model_type in ['xlnet'] else 0,
                 pad_on_left=bool(args.model_type in ['xlnet']),                 # pad on the left for xlnet
                 pad_token=tokenizer.convert_tokens_to_ids([tokenizer.pad_token])[0],
@@ -530,7 +530,8 @@ def main():
     config = config_class.from_pretrained(
         args.config_name if args.config_name else args.model_name_or_path,
         num_labels=1 if args.model_type in ["roberta_mc"] else num_labels,
-        finetuning_task=args.task_name
+        finetuning_task=args.task_name,
+        position_embedding_type="relative_key_query"
     )
     tokenizer = tokenizer_class.from_pretrained(args.tokenizer_name if args.tokenizer_name else args.model_name_or_path, do_lower_case=args.do_lower_case)
     model = model_class.from_pretrained(args.model_name_or_path, from_tf=bool('.ckpt' in args.model_name_or_path), config=config)

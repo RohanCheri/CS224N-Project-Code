@@ -24,6 +24,7 @@
 from __future__ import absolute_import, division, print_function
 
 import argparse
+from fcntl import LOCK_RW
 import glob
 import json
 import logging
@@ -39,6 +40,10 @@ from torch.utils.data.distributed import DistributedSampler
 from tensorboardX import SummaryWriter
 from tqdm import tqdm, trange
 import pathlib
+from hyperopt import rand, tpe, fmin, space_eval, hp
+from ray import tune
+from ray.tune import CLIReporter
+from ray.tune.schedulers import ASHAScheduler
 
 from pytorch_transformers import (WEIGHTS_NAME, BertConfig,
                                   BertForSequenceClassification, BertForMultipleChoice,
@@ -59,7 +64,6 @@ from utils import (compute_metrics, convert_examples_to_features,
                                 output_modes, processors,
                                 train_sizes, convert_multiple_choice_examples_to_features)
 
-
 logger = logging.getLogger(__name__)
 
 ALL_MODELS = sum((tuple(conf.pretrained_config_archive_map.keys()) for conf in (BertConfig, XLNetConfig, XLMConfig, RobertaConfig)), ())
@@ -74,7 +78,6 @@ MODEL_CLASSES = {
     'deberta': (DebertaV2Config, DebertaV2ForMultipleChoice, DebertaV2Tokenizer)
 }
 
-
 def set_seed(args):
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -82,8 +85,14 @@ def set_seed(args):
     if args.n_gpu > 0:
         torch.cuda.manual_seed_all(args.seed)
 
+def load_data(train_dataset, args, data_dir="./data"):
+    eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True, eval_split=eval_split)
+    test_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
 
-def train(args, train_dataset, model, tokenizer):
+    return [test_dataset, eval_dataset]
+
+
+def train(args, lr, train_dataset, model, tokenizer, checkpoint_dir=None, data_dir=None):
     """ Train the model """
     set_seed(args)  # Added here for reproductibility (even between python 2 and 3)
     if args.local_rank in [-1, 0]:
@@ -101,6 +110,7 @@ def train(args, train_dataset, model, tokenizer):
     else:
         t_total = len(train_dataloader) // args.gradient_accumulation_steps * args.num_train_epochs
 
+
     # Prepare optimizer and schedule (linear warmup and decay)
     no_decay = ['bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
@@ -108,7 +118,7 @@ def train(args, train_dataset, model, tokenizer):
         {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
 
-    optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    optimizer = AdamW(optimizer_grouped_parameters, lr, eps=args.adam_epsilon)
     if args.warmup_pct is None:
         scheduler = WarmupLinearSchedule(optimizer, warmup_steps=args.warmup_steps, t_total=t_total)
     else:
@@ -130,6 +140,12 @@ def train(args, train_dataset, model, tokenizer):
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.local_rank],
                                                           output_device=args.local_rank,
                                                           find_unused_parameters=True)
+    
+    if checkpoint_dir:
+        model_state, optimizer_state = torch.load(
+            os.path.join(checkpoint_dir, "checkpoint"))
+        model.load_state_dict(model_state)
+    optimizer.load_state_dict(optimizer_state)
 
     # Train!
     logger.info("***** Running training *****")
@@ -208,6 +224,10 @@ def train(args, train_dataset, model, tokenizer):
     if args.local_rank in [-1, 0]:
         tb_writer.close()
 
+    with tune.checkpoint_dir(epoch) as checkpoint_dir:
+        path = os.path.join(checkpoint_dir, "checkpoint")
+        torch.save((model.state_dict(), optimizer.state_dict()), path)
+
     return global_step, tr_loss / global_step
 
 
@@ -227,7 +247,7 @@ def evaluate(args, model, tokenizer, processor, prefix="", eval_split=None):
         results.update(existing_results)
 
     for eval_task, eval_output_dir in zip(eval_task_names, eval_outputs_dirs):
-        eval_dataset = load_and_cache_examples(args, eval_task, tokenizer, evaluate=True, eval_split=eval_split)
+        eval_dataset = load_data[1]
 
         if not os.path.exists(eval_output_dir) and args.local_rank in [-1, 0]:
             os.makedirs(eval_output_dir)
@@ -554,9 +574,19 @@ def main():
 
     # Training
     if args.do_train:
-        train_dataset = load_and_cache_examples(args, args.task_name, tokenizer, evaluate=False)
-        global_step, tr_loss = train(args, train_dataset, model, tokenizer)
+        train_dataset = load_data[0]
+        lr = args.learning_rate
+        config = {'lr': tune.loguniform(1e-5, 1e-4)}
+        scheduler = ASHAScheduler(
+            metric="loss",
+            mode="min",
+            grace_period=1,
+            reduction_factor=2)
+        global_step, tr_loss = train(args, lr, train_dataset, model, tokenizer)
         logger.info(" global_step = %s, average loss = %s", global_step, tr_loss)
+        global_step, tr_loss = tune.run(
+            partial(train, lr, train_dataset, model, tokenizer, data_dir=args.data_dir),
+            config=config)
 
 
     # Saving best-practices: if you use defaults names for the model, you can reload it using from_pretrained()
@@ -609,7 +639,6 @@ def main():
 
     logger.info("***** Experiment finished *****")
     return results
-
 
 if __name__ == "__main__":
     main()
